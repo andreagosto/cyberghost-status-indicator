@@ -23,14 +23,14 @@ ICON_ON = "vpn-on"
 ICON_OFF = "vpn-off"
 
 POPULAR_COUNTRIES = {
-    "Italia": "it",
-    "Germania": "de",
-    "Paesi Bassi": "nl",
-    "Francia": "fr",
-    "Spagna": "es",
-    "Svizzera": "ch",
-    "Regno Unito": "gb",
-    "Stati Uniti": "us",
+    "Italy": "it",
+    "Germany": "de",
+    "Netherlands": "nl",
+    "France": "fr",
+    "Spain": "es",
+    "Switzerland": "ch",
+    "United Kingdom": "gb",
+    "United States": "us",
 }
 
 
@@ -40,7 +40,7 @@ def acquire_lock():
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print("CyberGhost indicatore: gia' in esecuzione.")
+        print("CyberGhost indicator: already running.")
         sys.exit(0)
     os.ftruncate(fd, 0)
     os.write(fd, str(os.getpid()).encode())
@@ -178,19 +178,19 @@ class Indicator:
     def build_menu(self):
         self.menu = Gtk.Menu()
 
-        self.status_label = self._mk_item("Verifica...")
+        self.status_label = self._mk_item("Checking...")
         self.server_label = self._mk_item(" ")
         self.geo_label = self._mk_item(" ")
         self.ip_label = self._mk_item(" ")
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
-        item = Gtk.MenuItem(label="Disconnetti")
+        item = Gtk.MenuItem(label="Disconnect")
         item.connect("activate", lambda w: run_root(["--stop"]))
         self.disconnect_item = item
         self.menu.append(item)
 
-        sub = Gtk.MenuItem(label="Connetti a...")
+        sub = Gtk.MenuItem(label="Connect to...")
         submenu = Gtk.Menu()
         for name, code in POPULAR_COUNTRIES.items():
             it = Gtk.MenuItem(label="%s  (%s)" % (name, code))
@@ -202,11 +202,11 @@ class Indicator:
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
-        item = Gtk.MenuItem(label="Aggiorna stato")
+        item = Gtk.MenuItem(label="Refresh status")
         item.connect("activate", lambda w: self.refresh())
         self.menu.append(item)
 
-        item = Gtk.MenuItem(label="Esci")
+        item = Gtk.MenuItem(label="Quit")
         item.connect("activate", lambda w: Gtk.main_quit())
         self.menu.append(item)
 
@@ -216,13 +216,13 @@ class Indicator:
     def refresh(self):
         conn = is_connected()
         if self.connected is not None and conn != self.connected:
-            notify("CyberGhost VPN", "Connessione VPN " +
-                   ("attiva" if conn else "terminata"))
+            notify("CyberGhost VPN", "VPN connection " +
+                   ("established" if conn else "terminated"))
         self.connected = conn
         self.set_icon(conn)
         self.disconnect_item.set_sensitive(conn)
 
-        self.status_label.set_text("VPN ATTIVA" if conn else "VPN NON ATTIVA")
+        self.status_label.set_text("VPN ON" if conn else "VPN OFF")
 
         if conn:
             self.server_name, host, port = get_vpn_server()
@@ -231,7 +231,7 @@ class Indicator:
                 self.server_label.set_line_wrap(True)
                 self.server_label.show()
                 if self.server_name != self._last_server:
-                    dbg("server cambiato: %s -> %s (azzero geo)" % (self._last_server, self.server_name))
+                    dbg("server changed: %s -> %s (resetting geo)" % (self._last_server, self.server_name))
                     self._last_server = self.server_name
                     self.last_geo_fetch = 0
                     self.geo = None
@@ -245,20 +245,20 @@ class Indicator:
                 if now - self.last_geo_fetch > 1.5:
                     self.last_geo_fetch = now
                     threading.Thread(target=self._fetch_geo, daemon=True).start()
-                self.ip_label.set_text("IP: rilevamento...")
-                self.geo_label.set_text("Posizione: rilevamento...")
+                self.ip_label.set_text("IP: detecting...")
+                self.geo_label.set_text("Location: detecting...")
             elif now - self.last_geo_fetch > 8:
                 self.last_geo_fetch = now
                 threading.Thread(target=self._fetch_geo, daemon=True).start()
                 ip, city, country, isp = self.geo
                 self.ip_label.set_text("IP: %s" % ip)
                 pos = ", ".join(x for x in (city, country) if x)
-                self.geo_label.set_text("Posizione: %s" % pos if pos else "Posizione: ?")
+                self.geo_label.set_text("Location: %s" % pos if pos else "Location: ?")
             else:
                 ip, city, country, isp = self.geo
                 self.ip_label.set_text("IP: %s" % ip)
                 pos = ", ".join(x for x in (city, country) if x)
-                self.geo_label.set_text("Posizione: %s" % pos if pos else "Posizione: ?")
+                self.geo_label.set_text("Location: %s" % pos if pos else "Location: ?")
                 dbg("display server=%s ip=%s pos=%s" % (self.server_name, ip, pos or "?"))
             self.geo_label.show()
             self.ip_label.show()
@@ -280,7 +280,7 @@ class Indicator:
         ip, city, country, isp = get_geo()
         if ip and is_connected() is False:
             self.home_ip = ip
-            dbg("IP di casa rilevato: %s" % ip)
+            dbg("home IP detected: %s" % ip)
 
     def _fetch_geo(self):
         ip, city, country, isp = get_geo()
@@ -288,10 +288,10 @@ class Indicator:
         if not ip:
             return
         if not is_connected():
-            dbg("geo scartata: tunnel non attivo durante il rilevamento (evita falso Milan)")
+            dbg("geo discarded: tunnel not active during lookup (avoids false home location)")
             return
         if self.home_ip and ip == self.home_ip:
-            dbg("geo scartata: IP uguale all'IP di casa (%s) = transizione, non server" % ip)
+            dbg("geo discarded: IP equals home IP (%s) = transition, not the server" % ip)
             return
         server = self.server_name
         GLib.idle_add(self._apply_geo, (ip, city, country, isp), server)
@@ -303,7 +303,7 @@ class Indicator:
             ip, city, country, isp = geo
             self.ip_label.set_text("IP: %s" % ip)
             pos = ", ".join(x for x in (city, country) if x)
-            self.geo_label.set_text("Posizione: %s" % pos if pos else "Posizione: ?")
+            self.geo_label.set_text("Location: %s" % pos if pos else "Location: ?")
             dbg("display server=%s ip=%s pos=%s" % (self.server_name, ip, pos or "?"))
         return False
 

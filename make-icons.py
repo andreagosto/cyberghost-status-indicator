@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Genera le icone di testo "VPN" (verde = ON, grigio = OFF).
+"""Generate the "VPN" text icons (green = ON, gray = OFF).
 
-Dipendenze: python3-gi + gir1.2-pango-1.0 (+ pango libcairo).
-Uso: python3 make-icons.py [cartella_output]
+Dependencies: python3-gi + gir1.2-pango-1.0 (+ pango libcairo).
+Usage: python3 make-icons.py [output_directory]
 """
 import os
 import sys
@@ -33,7 +33,7 @@ def text_icon(text, color, path):
     ctx.set_source_rgba(*color)
     PangoCairo.show_layout(ctx, layout)
     surf.write_to_png(path)
-    print("generato %s (testo %dx%d)" % (path, w, h))
+    print("generated %s (text %dx%d)" % (path, w, h))
 
 
 def main():
