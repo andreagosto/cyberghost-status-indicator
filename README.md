@@ -10,7 +10,9 @@ GNOME system tray widget that shows the status of the CyberGhost VPN
   - **gray** = disconnected
 - On click it shows:
   - connection status (VPN ON / VPN OFF)
-  - **server** in use (e.g. `berlin-s405-i02`)
+  - **server** in use (e.g. `berlin-s405-i02`); the row is hidden when the
+    connection backend doesn't expose a server name (`(WireGuard)` is shown
+    when a WireGuard interface is in use)
   - **public IP** and **location** (city/country)
 - Quick actions:
   - **Connect to...** (Italy, Germany, Netherlands, France, Spain, Switzerland, United Kingdom, United States)
@@ -24,6 +26,20 @@ GNOME system tray widget that shows the status of the CyberGhost VPN
 Geolocation uses [ipwho.is](https://ipwho.is/) with a fallback to
 [ip-api.com](http://ip-api.com/). Lookups made while the VPN is down
 (or while switching servers) are discarded to avoid showing a wrong location.
+
+## How the status is detected
+
+`cyberghostvpn --status` is the source of truth: the indicator is ON when the
+CLI reports a VPN connection and OFF when it reports none. This also covers
+WireGuard-backed connections, where no `openvpn` process exists.
+
+Tunnel interfaces of other products (Tailscale's `tailscale0`, WireGuard,
+ZeroTier, ...) are ignored, so having Tailscale or another VPN active never
+makes the indicator show VPN ON. The `tun` interface check is only a fallback
+for the case where the `cyberghostvpn` CLI is unavailable.
+
+The server name is parsed from the `openvpn --remote` argument; if that is not
+available the row is hidden (or labelled `(WireGuard)` when applicable).
 
 ## Requirements
 

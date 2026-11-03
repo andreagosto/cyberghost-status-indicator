@@ -22,6 +22,12 @@ ICON_THEME_PATH = os.path.expanduser("~/.local/share/icons/cyberghost-indicator"
 ICON_ON = "vpn-on"
 ICON_OFF = "vpn-off"
 
+# tun interfaces that belong to other VPN/tunnel products and must never be
+# mistaken for a CyberGhost connection (e.g. tailscale0).
+THIRD_PARTY_TUN_PREFIXES = (
+    "tailscale", "ts", "wg", "zt", "nordlynx", "mullvad", "proton",
+)
+
 POPULAR_COUNTRIES = {
     "Italy": "it",
     "Germany": "de",
@@ -60,26 +66,64 @@ def run_root(args):
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def has_tun():
+def tun_interfaces():
+    """Names of the tun-type interfaces currently present."""
     try:
         out = subprocess.run(["ip", "-o", "link", "show", "type", "tun"],
+                             capture_output=True, text=True, timeout=10)
+    except Exception:
+        return []
+    names = []
+    for line in out.stdout.splitlines():
+        m = re.match(r"\d+:\s+([^:@\s]+)", line)
+        if m:
+            names.append(m.group(1))
+    return names
+
+
+def has_wireguard():
+    try:
+        out = subprocess.run(["ip", "-o", "link", "show", "type", "wireguard"],
                              capture_output=True, text=True, timeout=10)
         return bool(out.stdout.strip())
     except Exception:
         return False
 
 
-def is_connected():
-    if has_tun():
+def cyberghost_tun():
+    """True if a tun interface plausibly belongs to CyberGhost (not a third party)."""
+    for name in tun_interfaces():
+        low = name.lower()
+        if any(low.startswith(p) for p in THIRD_PARTY_TUN_PREFIXES):
+            continue
         return True
+    return False
+
+
+def cyberghost_status():
+    """Connection state from `cyberghostvpn --status`; None when it can't tell."""
     try:
         out = subprocess.run(["cyberghostvpn", "--status"],
                              capture_output=True, text=True, timeout=15)
-        if "VPN connection found" in out.stdout:
-            return True
     except Exception:
-        pass
-    return False
+        return None
+    text = ((out.stdout or "") + "\n" + (out.stderr or "")).lower()
+    if "no vpn connections found" in text:
+        return False
+    if "vpn connection found" in text:
+        return True
+    return None
+
+
+def is_connected():
+    # The CLI is the source of truth: it also covers WireGuard-backed
+    # connections, where no openvpn process exists.
+    status = cyberghost_status()
+    if status is not None:
+        return status
+    # Fallback used only if the CLI is unavailable: an openvpn process, or a
+    # tun interface that isn't a known third-party tunnel (e.g. tailscale0).
+    return get_vpn_server()[0] is not None or cyberghost_tun()
 
 
 def get_vpn_server():
@@ -237,8 +281,13 @@ class Indicator:
                     self.geo = None
                     self._geo_server = None
             else:
-                self.server_label.set_text("Server: ?")
-                self.server_label.show()
+                if has_wireguard():
+                    self.server_label.set_text("Server: (WireGuard)")
+                    self.server_label.show()
+                else:
+                    # Connected via a backend that doesn't expose an openvpn
+                    # --remote: hide the row instead of showing "Server: ?".
+                    self.server_label.hide()
 
             now = time.time()
             if self.geo is None or self._geo_server != self._last_server:
